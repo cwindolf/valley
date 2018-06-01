@@ -1,12 +1,14 @@
 /* ****************************************************************************
  * Loverly globals. */
 
+const print = console.log;
 var container;
 var camera, controls, mainScene, renderer;
 var terrainMat, terrain;
-var UVgga, UVggb, rxnScene, rxnPlane, rxnMat, rxnObj, rxnCamera, rxnRenderer;
+var UVgg0, UVgg, rxnCompute;
 const rxnD = 64, rxnDOn2 = rxnD / 2;
-const worldD = 1024, worldDon2 = worldD / 2;
+const worldD = 256, worldDon2 = worldD / 2;
+const HEIGHT = 5.0;
 const clock = new THREE.Clock();
 var frame = 0;
 const rxn_frames = 24;
@@ -44,7 +46,7 @@ const ks = [
 ];
 const num_phases = fs.length;
 const phase_freq = 1 / num_phases;
-const PERIOD = 150000;
+const PERIOD = 150000 * rxn_frames;
 
 /* ****************************************************************************
  * Lib */
@@ -72,61 +74,67 @@ function onWindowResize() {
     controls.handleResize();
 }
 
+function initialConditions(tex) {
+    let ic = tex.image.data;
+    noise.seed(Math.random());
+    let idx = 0;
+    for (let i = 0; i < rxnD; i++) {
+        for (let j = 0; j < rxnD; j++) {
+            let n = 0, freq = 0, max = 0;
+            for (let o = 0; o < 21; o++) {
+                freq = Math.pow(2, o);
+                max += (1 / freq);
+                n += noise.simplex2(
+                    i * freq * rxnD / 8,
+                    j * freq * rxnD / 8) / freq;
+            }
+            n /= max;
+            ic[idx + 0] = 1.;
+            if (n > 0.525) {
+                ic[idx + 1] = (1.5 + n) / 4.;
+            } else {
+                ic[idx + 1] = 0;
+            }
+            ic[idx + 2] = 0;
+            ic[idx + 3] = 1;
+            idx += 4;
+        }
+    }
+}
 
-function initRxnScene() {
-    rxnScene = new THREE.Scene();
-    rxnCamera = new THREE.OrthographicCamera(worldD / - 2, worldD / 2,
-        worldD / 2, worldD / - 2, 1, 1000);
-    UVgga = new THREE.WebGLRenderTarget(rxnD, rxnD, {
-        wrapS: THREE.RepeatWrapping,
-        wrapT: THREE.RepeatWrapping,
-        format: THREE.RGBAFormat,
-        type: THREE.FloatType,
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.LinearMipMapLinearFilter,
-        depthBuffer: false,
-        stencilBuffer: false,
-    });
-    UVggb = new THREE.WebGLRenderTarget(rxnD, rxnD, {
-        wrapS: THREE.RepeatWrapping,
-        wrapT: THREE.RepeatWrapping,
-        format: THREE.RGBAFormat,
-        type: THREE.FloatType,
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.LinearMipMapLinearFilter,
-        depthBuffer: false,
-        stencilBuffer: false,
-    });
-    rxnRenderer = new THREE.WebGLRenderer();
-    rxnRenderer.setSize(rxnD, rxnD);
-    rxnMat = new THREE.ShaderMaterial({
-        uniforms: {
-            UVgg: UVgga.texture,
-            resolution: { type: 'v2', value: new THREE.Vector2(worldD, worldD)},
-            D_u: { type: 'f', value: 1.0 },
-            D_v: { type: 'f', value: 0.5 },
-            f: { type: 'f', value: fk0[0] },
-            k: { type: 'f', value: fk0[1] },
-        },
-        fragmentShader: document.getElementById('rfs').textContent,
-    });
-    rxnPlane = new THREE.PlaneBufferGeometry(worldD, worldD);
-    rxnObj = new THREE.Mesh(rxnPlane, rxnMat);
-    rxnScene.add(rxnObj);
+function initRxn() {
+    rxnCompute = new GPUComputationRenderer(rxnD, rxnD, renderer);
+    UVgg0 = rxnCompute.createTexture();
+    initialConditions(UVgg0);
+    UVgg = rxnCompute.addVariable(
+        'UVgg',
+        document.getElementById('rfs').textContent,
+        UVgg0);
+    rxnCompute.setVariableDependencies(UVgg, [UVgg]);
+    UVgg.material.uniforms.D_u = { type: 'f', value: 1.0 };
+    UVgg.material.uniforms.D_v = { type: 'f', value: 0.5 };
+    UVgg.material.uniforms.f   = { type: 'f', value: fk0[0] };
+    UVgg.material.uniforms.k   = { type: 'f', value: fk0[1] };
+    let err = rxnCompute.init();
+    if (err !== null) {
+        console.error(err);
+    }
 }
 
 
-function initMainScene() {
+function init() {
     container = document.getElementById('container');
     container.innerHTML = "";
 
     camera = new THREE.PerspectiveCamera(60,
         window.innerWidth / window.innerHeight, 1, 10000);
-    camera.position.set(new THREE.Vector3(0.0, 0.0, 1.0));
 
-    controls = new THREE.FirstPersonControls(camera);
-    controls.movementSpeed = 10;
-    controls.lookSpeed = 0.05;
+    renderer = new THREE.WebGLRenderer();
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    initRxn();
 
     mainScene = new THREE.Scene();
     mainScene.background = new THREE.Color(0xdddddd);
@@ -136,54 +144,58 @@ function initMainScene() {
     var phongShader = THREE.ShaderLib.phong;
     terrainMat = new THREE.ShaderMaterial({
         uniforms: THREE.UniformsUtils.merge([phongShader.uniforms, {
-            // UVgg: UVgga.texture,
+            UVgg: { type: 't', value: UVgg0 },
             emissive : { type: 'c', value: new THREE.Color(0x1111dd) },
             specular : { type: 'c', value: new THREE.Color(0x1111dd) },
             color: new THREE.Color(0x1111dd),
             lights: true,
             ambient: new THREE.Color(0x1111dd),
         }]),
-        // vertexShader: document.getElementById('tvs').textContent,
-        vertexShader: phongShader.vertexShader,
-        fragmentShader: phongShader.fragmentShader,
+        vertexShader: document.getElementById('tvs').textContent,
+        // vertexShader: phongShader.vertexShader,
+        fragmentShader: THREE.ShaderChunk['meshphong_frag'],
         lights: true,
         side: THREE.DoubleSide,
     });
+    terrainMat.defines.WIDTH  = rxnD.toFixed(1);
+    terrainMat.defines.BOUNDS = worldD.toFixed(1);
+    terrainMat.defines.HEIGHT = HEIGHT.toFixed(1);
     terrain = new THREE.Mesh(terrainGeom, terrainMat);
     mainScene.add(terrain);    
 
     var light = new THREE.PointLight(0xffffff, 1);
-    light.position.set(0, 0, 5);
+    light.position.set(0, 0, HEIGHT + 2.0);
     mainScene.add(light);
 
-    renderer = new THREE.WebGLRenderer();
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
+    controls = new THREE.FlyControls(camera);
+    controls.movementSpeed = 10;
+    controls.domElement = renderer.domElement;
+    controls.rollSpeed = Math.PI / 24;
+    controls.autoForward = false;
+    controls.dragToLook = false;
+    controls.object.position.set(0.0, 0.0, HEIGHT + 2.0);
 
     window.addEventListener('resize', onWindowResize, false);
 }
 
 
 function react() {
-    rxnRenderer.render(rxnScene, rxnCamera, UVggb);
-    // Ping pong.
-    let tmp = UVgga;
-    UVgga = UVggb;
-    UVggb = tmp;
-    rxnMat.uniforms.UVgg.value = UVgga.texture;
-    terrainMat.uniforms.UVgg.value = UVgga.texture;
+    let fk = fk(frame);
+    UVgg.material.uniforms.f   = { type: 'f', value: fk[0] };
+    UVgg.material.uniforms.k   = { type: 'f', value: fk[1] };
+    rxnCompute.compute();
+    terrainMat.uniforms.UVgg.value = rxnCompute.getCurrentRenderTarget(UVgg).texture;
 }
 
 
 function animate() {
     requestAnimationFrame(animate);
-    render();
     frame++;
     if (!(frame % rxn_frames)) {
-        // react();
+        react();
         frame = 0;
     }
+    render();
 }
 
 
@@ -200,7 +212,6 @@ if (!Detector.webgl) {
     Detector.addGetWebGLMessage();
     document.getElementById('container').innerHTML = "";
 } else {
-    initRxnScene();
-    initMainScene();
+    init();
     animate();
 }

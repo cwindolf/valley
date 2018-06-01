@@ -1,7 +1,7 @@
 precision highp float;
 
-uniform highp sampler2D UVgg;
-uniform vec2 resolution;
+// uniform highp sampler2D UVgg;
+// uniform vec2 resolution;
 uniform float D_u;
 uniform float D_v;
 uniform float f;

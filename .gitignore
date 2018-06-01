@@ -4,5 +4,5 @@
 three*.js
 perlin.js
 Detector.js
-FirstPersonControls.js
-
+*Controls.js
+*Renderer.js
