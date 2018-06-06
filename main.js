@@ -8,10 +8,12 @@ var terrainMat, terrain;
 var UVgg0, UVgg, rxnCompute;
 const rxnD = 64, rxnDOn2 = rxnD / 2;
 const worldD = 256, worldDon2 = worldD / 2;
-const HEIGHT = 5.0;
+const HEIGHT = 20.0;
+const GLOB_RATE = 1.0;
 const clock = new THREE.Clock();
 var frame = 0;
-const rxn_frames = 24;
+var t0;
+const rxn_frames = 1;
 const fs = [
     0.0141,
     0.014,
@@ -115,6 +117,8 @@ function initRxn() {
     UVgg.material.uniforms.D_v = { type: 'f', value: 0.5 };
     UVgg.material.uniforms.f   = { type: 'f', value: fk0[0] };
     UVgg.material.uniforms.k   = { type: 'f', value: fk0[1] };
+    UVgg.material.uniforms.dt  = { type: 'f', value: 0 };
+    UVgg.material.defines.GLOB_RATE = GLOB_RATE.toFixed(1);
     let err = rxnCompute.init();
     if (err !== null) {
         console.error(err);
@@ -137,35 +141,41 @@ function init() {
     initRxn();
 
     mainScene = new THREE.Scene();
-    mainScene.background = new THREE.Color(0xdddddd);
+    mainScene.background = new THREE.Color(0x333333);
     mainScene.fog = new THREE.FogExp2(0xff00000, 0.0025);
 
     var terrainGeom = new THREE.PlaneBufferGeometry(worldD, worldD, rxnD - 1, rxnD - 1);
-    var phongShader = THREE.ShaderLib.phong;
     terrainMat = new THREE.ShaderMaterial({
-        uniforms: THREE.UniformsUtils.merge([phongShader.uniforms, {
+        uniforms: THREE.UniformsUtils.merge([THREE.ShaderLib.phong.uniforms, {
             UVgg: { type: 't', value: UVgg0 },
-            emissive : { type: 'c', value: new THREE.Color(0x1111dd) },
-            specular : { type: 'c', value: new THREE.Color(0x1111dd) },
-            color: new THREE.Color(0x1111dd),
+            emissive : { type: 'c', value: new THREE.Color(0x9f9f9f) },
+            specular : { type: 'c', value: new THREE.Color(0xdadada) },
+            // color: new THREE.Color(0x1111dd),
             lights: true,
-            ambient: new THREE.Color(0x1111dd),
+            // ambient: new THREE.Color(0x1111dd),
         }]),
         vertexShader: document.getElementById('tvs').textContent,
-        // vertexShader: phongShader.vertexShader,
-        fragmentShader: THREE.ShaderChunk['meshphong_frag'],
+        fragmentShader: document.getElementById('tfs').textContent,
         lights: true,
+        fog: true,
         side: THREE.DoubleSide,
     });
     terrainMat.defines.WIDTH  = rxnD.toFixed(1);
     terrainMat.defines.BOUNDS = worldD.toFixed(1);
     terrainMat.defines.HEIGHT = HEIGHT.toFixed(1);
+    terrainMat.defines.USE_COLOR = "";
     terrain = new THREE.Mesh(terrainGeom, terrainMat);
+    terrain.castShadow = terrain.receiveShadow = true;
     mainScene.add(terrain);    
 
-    var light = new THREE.PointLight(0xffffff, 1);
-    light.position.set(0, 0, HEIGHT + 2.0);
-    mainScene.add(light);
+    var ptLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    ptLight.castShadow = true;
+    ptLight.target = terrain;
+    ptLight.position = new THREE.Vector3(2.0, 0.0, 1.0);
+    mainScene.add(ptLight);
+
+    var amLight = new THREE.AmbientLight(0x404040);
+    mainScene.add(amLight);
 
     controls = new THREE.FlyControls(camera);
     controls.movementSpeed = 10;
@@ -173,34 +183,34 @@ function init() {
     controls.rollSpeed = Math.PI / 24;
     controls.autoForward = false;
     controls.dragToLook = false;
-    controls.object.position.set(0.0, 0.0, HEIGHT + 2.0);
+    controls.object.position.set(0.0, 0.0, 10.0 * HEIGHT + 2.0);
 
     window.addEventListener('resize', onWindowResize, false);
 }
 
 
-function react() {
-    let fk = fk(frame);
-    UVgg.material.uniforms.f   = { type: 'f', value: fk[0] };
-    UVgg.material.uniforms.k   = { type: 'f', value: fk[1] };
+function react(dt) {
+    let fk_ = fk(frame);
+    UVgg.material.uniforms.f  = { type: 'f', value: fk_[0] };
+    UVgg.material.uniforms.k  = { type: 'f', value: fk_[1] };
+    UVgg.material.uniforms.dt = { type: 'f', value: dt     };
     rxnCompute.compute();
     terrainMat.uniforms.UVgg.value = rxnCompute.getCurrentRenderTarget(UVgg).texture;
 }
 
-
 function animate() {
+    dt = clock.getDelta();
     requestAnimationFrame(animate);
     frame++;
     if (!(frame % rxn_frames)) {
-        react();
-        frame = 0;
+        react(dt);
     }
-    render();
+    render(dt);
 }
 
 
 function render() {
-    controls.update(clock.getDelta());
+    controls.update(dt);
     renderer.render(mainScene, camera);
 }
 
@@ -212,6 +222,7 @@ if (!Detector.webgl) {
     Detector.addGetWebGLMessage();
     document.getElementById('container').innerHTML = "";
 } else {
+    window.addEventListener('keyup', function(e) { if(e.keyCode == 27) {debugger;} }, false);
     init();
-    animate();
+    requestAnimationFrame(animate);
 }

@@ -5,7 +5,7 @@ IN  = 'valley.tmpl'
 OUT = 'valley.html'
 
 js_files = ('main',)
-shaders  = ('reactfrag', 'terrainvert',)
+shaders  = ('reactfrag', 'terrainvert', 'terrainfrag')
 
 class JustWantToRenderThisOneTemplateHandler(SimpleHTTPRequestHandler):
 
