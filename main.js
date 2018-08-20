@@ -5,68 +5,18 @@ const print = console.log;
 var container;
 var camera, controls, mainScene, renderer;
 var terrainMat, terrain;
-var UVgg0, UVgg, rxnCompute;
+var Sggg0, Sggg, rxnCompute;
 const rxnD = 64, rxnDOn2 = rxnD / 2;
 const worldD = 256, worldDon2 = worldD / 2;
-const HEIGHT = 20.0;
 const GLOB_RATE = 1.0;
 const clock = new THREE.Clock();
 var frame = 0;
 var t0;
 const rxn_frames = 1;
-const fs = [
-    0.0141,
-    0.014,
-    0.022,
-    0.019,
-    0.026,
-    0.022,
-    0.026,
-    0.038,
-    0.042,
-    0.058,
-    0.062,
-    0.0638,
-    0.058,
-    0.038,
-];
-const ks = [
-    0.0525,
-    0.05,
-    0.051,
-    0.0548,
-    0.054,
-    0.051,
-    0.0565,
-    0.061,
-    0.059,
-    0.062,
-    0.061,
-    0.061,
-    0.062,
-    0.061,
-];
-const num_phases = fs.length;
 const phase_freq = 1 / num_phases;
-const PERIOD = 150000 * rxn_frames;
 
 /* ****************************************************************************
  * Lib */
-
-function fk(t) {
-    t = (t % PERIOD) / PERIOD;
-    let t_ = phase_freq;
-    for (let i = 0; i < num_phases; i++) {
-        if (t_ > t)  {
-            return [
-                fs[i], 
-                ks[i]
-            ];
-        }
-        t_ += phase_freq;
-    }
-}
-const fk0 = fk(0);
 
 
 function onWindowResize() {
@@ -106,19 +56,18 @@ function initialConditions(tex) {
 
 function initRxn() {
     rxnCompute = new GPUComputationRenderer(rxnD, rxnD, renderer);
-    UVgg0 = rxnCompute.createTexture();
-    initialConditions(UVgg0);
-    UVgg = rxnCompute.addVariable(
-        'UVgg',
+    Sggg0 = rxnCompute.createTexture();
+    initialConditions(Sggg0);
+    Sggg = rxnCompute.addVariable(
+        'Sggg',
         document.getElementById('rfs').textContent,
-        UVgg0);
-    rxnCompute.setVariableDependencies(UVgg, [UVgg]);
-    UVgg.material.uniforms.D_u = { type: 'f', value: 1.0 };
-    UVgg.material.uniforms.D_v = { type: 'f', value: 0.5 };
-    UVgg.material.uniforms.f   = { type: 'f', value: fk0[0] };
-    UVgg.material.uniforms.k   = { type: 'f', value: fk0[1] };
-    UVgg.material.uniforms.dt  = { type: 'f', value: 0 };
-    UVgg.material.defines.GLOB_RATE = GLOB_RATE.toFixed(1);
+        Sggg0);
+    rxnCompute.setVariableDependencies(Sggg, [Sggg]);
+    Sggg.material.uniforms.alpha = { type: 'f', value: 1.0 };
+    Sggg.material.uniforms.beta = { type: 'f', value: 0.5 };
+    Sggg.material.uniforms.dt = { type: 'f', value: 0.0 };
+    Sggg.material.uniforms.f = { type: 'f', value: 0.1 };
+    Sggg.material.defines.GLOB_RATE = GLOB_RATE.toFixed(1);
     let err = rxnCompute.init();
     if (err !== null) {
         console.error(err);
@@ -142,22 +91,15 @@ function init() {
 
     mainScene = new THREE.Scene();
     mainScene.background = new THREE.Color(0x333333);
-    mainScene.fog = new THREE.FogExp2(0xff00000, 0.0025);
 
     var terrainGeom = new THREE.PlaneBufferGeometry(worldD, worldD, rxnD - 1, rxnD - 1);
     terrainMat = new THREE.ShaderMaterial({
-        uniforms: THREE.UniformsUtils.merge([THREE.ShaderLib.phong.uniforms, {
-            UVgg: { type: 't', value: UVgg0 },
-            emissive : { type: 'c', value: new THREE.Color(0x9f9f9f) },
-            specular : { type: 'c', value: new THREE.Color(0xdadada) },
-            // color: new THREE.Color(0x1111dd),
-            lights: true,
-            // ambient: new THREE.Color(0x1111dd),
-        }]),
+        uniforms: {
+            Sggg: { type: 't', value: Sggg0 },
+        },
         vertexShader: document.getElementById('tvs').textContent,
         fragmentShader: document.getElementById('tfs').textContent,
-        lights: true,
-        fog: true,
+        lights: false,
         side: THREE.DoubleSide,
     });
     terrainMat.defines.WIDTH  = rxnD.toFixed(1);
@@ -168,34 +110,19 @@ function init() {
     terrain.castShadow = terrain.receiveShadow = true;
     mainScene.add(terrain);    
 
-    var ptLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    ptLight.castShadow = true;
-    ptLight.target = terrain;
-    ptLight.position = new THREE.Vector3(2.0, 0.0, 1.0);
-    mainScene.add(ptLight);
-
     var amLight = new THREE.AmbientLight(0x404040);
     mainScene.add(amLight);
 
-    controls = new THREE.FlyControls(camera);
-    controls.movementSpeed = 10;
-    controls.domElement = renderer.domElement;
-    controls.rollSpeed = Math.PI / 24;
-    controls.autoForward = false;
-    controls.dragToLook = false;
-    controls.object.position.set(0.0, 0.0, 10.0 * HEIGHT + 2.0);
+    camera.position.set(0.0, 0.0, 10.0);
 
     window.addEventListener('resize', onWindowResize, false);
 }
 
 
 function react(dt) {
-    let fk_ = fk(frame);
-    UVgg.material.uniforms.f  = { type: 'f', value: fk_[0] };
-    UVgg.material.uniforms.k  = { type: 'f', value: fk_[1] };
-    UVgg.material.uniforms.dt = { type: 'f', value: dt     };
+    Sggg.material.uniforms.dt = { type: 'f', value: dt     };
     rxnCompute.compute();
-    terrainMat.uniforms.UVgg.value = rxnCompute.getCurrentRenderTarget(UVgg).texture;
+    terrainMat.uniforms.Sggg.value = rxnCompute.getCurrentRenderTarget(Sggg).texture;
 }
 
 function animate() {

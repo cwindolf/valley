@@ -1,8 +1,8 @@
 from jinja2 import Template
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-IN  = 'valley.tmpl'
-OUT = 'valley.html'
+IN  = 'sand.tmpl'
+OUT = 'sand.html'
 
 js_files = ('main',)
 shaders  = ('reactfrag', 'terrainvert', 'terrainfrag')
