@@ -22,7 +22,10 @@ class JustWantToRenderThisOneTemplateHandler(SimpleHTTPRequestHandler):
                 template = Template(t.read())
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(template.render(**files).encode())
+            x = template.render(**files).encode()
+            self.wfile.write(x)
+            with open(OUT, 'wb') as file:
+                file.write(x)
         else:
             super().do_GET()
 
