@@ -3,6 +3,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 IN  = 'sand.tmpl'
 OUT = 'sand.html'
+SAVE = 'index.html'
 
 js_files = ('main',)
 shaders  = ('reactfrag', 'terrainvert', 'terrainfrag')
@@ -24,7 +25,7 @@ class JustWantToRenderThisOneTemplateHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             x = template.render(**files).encode()
             self.wfile.write(x)
-            with open(OUT, 'wb') as file:
+            with open(SAVE, 'wb') as file:
                 file.write(x)
         else:
             super().do_GET()

@@ -5,9 +5,9 @@ precision highp float;
 uniform float alpha;
 uniform float beta;
 uniform float D_v;
-uniform float dt;
 uniform float f;
 uniform float time;
+uniform vec2 ij;
 
 float rho(float x) {
     return (1. / (1. + exp(5. * (x + 1.0))));
@@ -81,10 +81,14 @@ void main() {
                   + (rr - ll) / 5.;
     float grad_ld = (dr - ul + r - u + d - l) / 4.;
 
+    float inter = 0.0;
+    if (ij.x > 0.0) {
+        float inter = 10000. * exp(-length(position - ij));
+    }
     float ds = alpha * (grad_fd * 0.5 + 1.0 * gamma(grad_fd)) + f + beta * lap;
 
     float warp = sin(0.4 * time);
-    float s_new = c + GLOB_RATE * (0.5 + 1.25 * max(warp, 0.0)) * dt * ds;
+    float s_new = c + inter + GLOB_RATE * (0.75 + 1.0 * max(warp, 0.0)) * ds;
 
     float wt = 0.005 * time;
     vec2 here = 2.0 * position - vec2(0.03 * time + 0.14 * warp, 0.0);

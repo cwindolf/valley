@@ -6,17 +6,15 @@ var container;
 var camera, mainScene, renderer;
 var terrainMat, terrain;
 var SLWg0, SLWg, rxnCompute;
-const rxnD = 256;
+const rxnD = 128;
 const worldD = 128;
-const GLOB_RATE = 1.0;
-const BASE_NOISE_FREQ = 6000.;
+const GLOB_RATE = 0.005;
+const BASE_NOISE_FREQ = 8000.;
 const clock = new THREE.Clock();
-// var frame = 0;
-var t0;
-// const rxn_frames = 1;
+let mousedown = false;
 
 /* ****************************************************************************
- * Dat */
+ * Sand color data */
 
 const sands = [
         [199, 153, 121],
@@ -60,8 +58,8 @@ const sands = [
 
 
 function onWindowResize() {
-    var screen = 2 * Math.tan( camera.fov * Math.PI / 360 ) * (container.clientWidth / container.clientHeight); 
-    camera.position.z = (worldD / screen);
+    var screen = 2 * Math.tan(camera.fov * Math.PI / 360) * Math.max(container.clientWidth, container.clientHeight) / container.clientHeight;
+    camera.position.z = worldD / screen;
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -69,21 +67,10 @@ function onWindowResize() {
 
 function initialConditions(tex) {
     let ic = tex.image.data;
-    noise.seed(Math.random());
     let idx = 0;
     for (let j = 0; j < rxnD; j++) {
         for (let i = 0; i < rxnD; i++) {
-            let n = 0, freq = 0, max = 0;
-            for (let o = 0; o < 2; o++) {
-                freq = Math.pow(2, o);
-                max += 1 / freq;
-                n += noise.simplex3(
-                    Math.cos(i * freq * 2 * Math.PI / rxnD) * 1.6,
-                    Math.sin(i * freq * 2 * Math.PI / rxnD) * 1.6,
-                    j * freq * rxnD / BASE_NOISE_FREQ) / freq;
-            }
-            n /= max;
-            ic[idx + 0] = (n + 1.) / 2. + 0.05 * Math.random();
+            ic[idx + 0] = 0.4 + 0.1 * (Math.random() + Math.random());
             ic[idx + 1] = 0.0;
             ic[idx + 2] = 0.0;
             ic[idx + 3] = 1.0;
@@ -102,11 +89,11 @@ function initRxn() {
         SLWg0);
     rxnCompute.setVariableDependencies(SLWg, [SLWg]);
     SLWg.material.uniforms.alpha = { type: 'f', value: 1.0 };
-    SLWg.material.uniforms.beta = { type: 'f', value: 0.3 };
-    SLWg.material.uniforms.dt = { type: 'f', value: 0.0 };
+    SLWg.material.uniforms.beta = { type: 'f', value: 0.1 };
     SLWg.material.uniforms.f = { type: 'f', value: -0.5 };
     SLWg.material.uniforms.time = { type: 'f', value: 0.0 };
-    SLWg.material.defines.GLOB_RATE = GLOB_RATE.toFixed(1);
+    SLWg.material.uniforms.ij = { type: 'v2', value: new THREE.Vector2(-1, -1) };
+    SLWg.material.defines.GLOB_RATE = GLOB_RATE.toFixed(5);
     let err = rxnCompute.init();
     if (err !== null) {
         console.error(err);
@@ -172,19 +159,16 @@ function init() {
 }
 
 
-function react(dt, t) {
-    SLWg.material.uniforms.dt = { type: 'f', value: dt };
-    SLWg.material.uniforms.time = { type: 'f', value: t };
+function react() {
+    SLWg.material.uniforms.time = { type: 'f', value: clock.getElapsedTime() };
     rxnCompute.compute();
     terrainMat.uniforms.SLWg.value = rxnCompute.getCurrentRenderTarget(SLWg).texture;
 }
 
 function animate() {
-    // dt = clock.getDelta();
-    var t = clock.getElapsedTime();
-    requestAnimationFrame(animate);
-    react(0.0045, t);
+    react();
     render();
+    requestAnimationFrame(animate);
 }
 
 
@@ -198,10 +182,11 @@ function render() {
 
 if (!Detector.webgl) {
     Detector.addGetWebGLMessage();
-    document.getElementById('container').innerHTML = "";
+    document.getElementById('container').innerHTML = "Your Computer is Buns i mean Im sorry...";
 } else {
     window.addEventListener('keyup', function(e) { if(e.keyCode == 27) {debugger;} }, false);
     init();
+    for (z = 0; z < 10000; z++) { react(Math.PI); }
     onWindowResize();
     requestAnimationFrame(animate);
 }
